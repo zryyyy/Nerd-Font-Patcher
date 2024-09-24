@@ -1,0 +1,51 @@
+name: Fonts Patcher
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Ensure we have permission to create releases
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@main
+
+    - name: Set up variables
+      run: |
+        TAG_DATE=$(date +%Y%m%d)
+        echo "TAG_DATE=$TAG_DATE" >> $GITHUB_ENV
+
+    - name: Patch fonts
+      run: |
+        mkdir -p patched_fonts/all_fonts
+        for dir in *; do
+          if [[ -d "$dir" && "$dir" != ".github" && "$dir" != "patched_fonts" ]]; then
+            dir_name=$(basename "$dir")
+            echo "Processing directory: $dir_name"
+            mkdir -p "patched_fonts/$dir_name"
+            docker run --rm -v "$PWD/$dir":/in -v "$PWD/patched_fonts/$dir_name":/out -e "PN=10" nerdfonts/patcher --complete
+            cp patched_fonts/"$dir_name"/* patched_fonts/all_fonts/
+          fi
+        done
+
+    - name: Zip fonts
+      run: |
+        cd patched_fonts
+        zip -j "../all_fonts.zip" "all_fonts"/*
+        for dir in *; do
+          if [[ -d "$dir" && "$dir" != "all_fonts" ]]; then
+            zip -j "../${dir}.zip" "$dir"/*
+          fi
+        done
+
+    - name: Create Release
+      uses: softprops/action-gh-release@master
+      with:
+        tag_name: ${{ env.TAG_DATE }}
+        name: "Patched Fonts - ${{ env.TAG_DATE }}"
+        files: "*.zip"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
